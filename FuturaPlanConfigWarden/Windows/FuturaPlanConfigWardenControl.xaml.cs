@@ -39,7 +39,11 @@ namespace FuturaPlanConfigWarden.Windows {
 
         private string m_originalConnectionString { get; } = @"Data Source=(LOCAL)\SQLEXPRESS;Initial Catalog=FuturaPlan;Trusted_Connection=True;MultipleActiveResultSets=True";
         private string m_overrideConnectionString { get; } = "Data Source=(LOCAL);Initial Catalog={0};Trusted_Connection=True;MultipleActiveResultSets=True";
+        
+        // These objects can be GCd and lose their listeners if we dont keep a reference to them.
         private BuildEvents m_buildEvents;
+        private SolutionEvents m_solutionEvents;
+
         public FuturaPlanConfigWardenControl(WindowState state) {
             Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread();
             _state = state;
@@ -47,12 +51,37 @@ namespace FuturaPlanConfigWarden.Windows {
 
             DataContext = this;
 
+            m_buildEvents = _state.DTE.Events.BuildEvents;
+            m_solutionEvents = _state.DTE.Events.SolutionEvents;
+
+            m_buildEvents.OnBuildBegin += BuildStart;
+            m_buildEvents.OnBuildDone += BuildEnd;
+
+            m_solutionEvents.Opened += () => {
+
+                if (AppConfig != null) {
+                    return;
+                }
+
+                if (TryGetAppConfig(out ProjectItem aconf)) {
+                    InitializeAppConfig(aconf);
+                }
+
+            };
+
             if (TryGetAppConfig(out ProjectItem aconf)) {
-                AppConfig = aconf;
-            } else {
-                throw new FileNotFoundException("Could not locate App.config in FuturaPlan.MainUI project");
+                InitializeAppConfig(aconf);
             }
 
+            SetConnectionString(m_originalConnectionString);
+
+            InitializeComponent();
+        }
+
+        private void InitializeAppConfig(ProjectItem aconf) {
+
+            Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread();
+            AppConfig = aconf;
             foreach (Property prop in AppConfig.Properties) {
                 if (prop.Name == "LocalPath") {
                     AppConfigPath = prop.Value as string;
@@ -60,14 +89,6 @@ namespace FuturaPlanConfigWarden.Windows {
             }
 
             AppConfigTemplate = XDocument.Load(AppConfigPath);
-
-            m_buildEvents = _state.DTE.Events.BuildEvents;
-            m_buildEvents.OnBuildBegin += BuildStart;
-            m_buildEvents.OnBuildDone += BuildEnd;
-
-            SetConnectionString(m_originalConnectionString);
-
-            InitializeComponent();
         }
 
         private void BuildStart(vsBuildScope Scope, vsBuildAction Action) {
@@ -89,7 +110,6 @@ namespace FuturaPlanConfigWarden.Windows {
                 default:
                     break;
             }
-
         }
 
         private void BuildEnd(vsBuildScope Scope, vsBuildAction Action) {
@@ -106,10 +126,13 @@ namespace FuturaPlanConfigWarden.Windows {
                 default:
                     break;
             }
-
         }
 
         private void SetConnectionString(string connstring) {
+
+            if (AppConfigTemplate == null) {
+                return;
+            }
 
             AppConfigTemplate.Root
                     .Elements("connectionStrings")
@@ -140,7 +163,6 @@ namespace FuturaPlanConfigWarden.Windows {
 
                     list.Add(dr[0].ToString());
                 }
-
             }
 
             return list;
