@@ -169,10 +169,20 @@ namespace FuturaPlanConfigWarden.Windows {
         }
 
         public bool TryGetAppConfig(out ProjectItem appConfig) {
-            Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread();
-            var loadedProjects = (Array)_state.DTE.ActiveSolutionProjects;
 
+            Array loadedProjects;
             appConfig = null;
+
+            try
+            {
+                Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread();
+                loadedProjects = (Array)_state.DTE.ActiveSolutionProjects;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+
             foreach (Project project in loadedProjects) {
                 for (int i = 0; i < project.ProjectItems.Count; i++) {
                     foreach (ProjectItem item in project.ProjectItems) {
@@ -181,7 +191,6 @@ namespace FuturaPlanConfigWarden.Windows {
                             return true;
                         }
                     }
-
                 }
             }
 
