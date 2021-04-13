@@ -2,6 +2,7 @@
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -28,16 +29,25 @@ namespace FuturaPlanConfigWarden {
             }
         }
 
-        public bool TryGetCacheData(out ICollection<string> data, out string active) {
+        public bool TryGetCacheData(out ObservableCollection<string> data, out string active) {
+
+            string file = Path.Combine(m_cacheLocation, m_cacheName);
 
             JObject json = new();
-            data = new List<string>();
+            data = new ObservableCollection<string>();
+            active = "";
 
-            using (StreamReader reader = new(File.OpenRead(Path.Combine(m_cacheLocation, m_cacheName)))) {
+            if (!File.Exists(file)) {
+                return false;
+            }
+
+            using (StreamReader reader = new(File.OpenRead(file))) {
                 json = JObject.Parse(reader.ReadToEnd());
             }
 
-            active = json["dblist"].FirstOrDefault(active => active == json["active"])?.ToString();
+            string activedb = json["active"].ToString();
+
+            active = json["dblist"].FirstOrDefault(active => active.Value<string>() == activedb)?.ToString();
 
             if (string.IsNullOrEmpty(active)) {
                 return false;

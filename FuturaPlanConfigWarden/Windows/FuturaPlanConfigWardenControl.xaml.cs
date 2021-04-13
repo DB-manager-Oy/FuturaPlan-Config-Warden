@@ -10,13 +10,25 @@ using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Data;
 using Microsoft.Win32;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 
 namespace FuturaPlanConfigWarden.Windows {
-    public partial class FuturaPlanConfigWardenControl : UserControl {
+    public partial class FuturaPlanConfigWardenControl : UserControl, INotifyPropertyChanged {
 
         public ObservableCollection<string> DatabaseList { get; set; }
 
-        public string SelectedDatabase { get; set; }
+        private string m_selectedDatabase;
+        public string SelectedDatabase {
+            get {
+                return m_selectedDatabase;
+            }
+            set {
+                m_selectedDatabase = value;
+                m_dbCache.Update(DatabaseList, value); // fite me irl
+                OnPropertyChanged();
+            }
+        }
         public bool OverrideConnectionString { get; set; } = true;
 
         private DbCache m_dbCache;
@@ -41,7 +53,7 @@ namespace FuturaPlanConfigWarden.Windows {
 
         private string m_originalConnectionString { get; } = @"Data Source=(LOCAL)\SQLEXPRESS;Initial Catalog=FuturaPlan;Trusted_Connection=True;MultipleActiveResultSets=True";
         private string m_overrideConnectionString { get; } = "Data Source=(LOCAL);Initial Catalog={0};Trusted_Connection=True;MultipleActiveResultSets=True";
-        
+
         // These objects can be GCd and lose their listeners if we dont keep a reference to them.
         private BuildEvents m_buildEvents;
         private SolutionEvents m_solutionEvents;
@@ -50,7 +62,13 @@ namespace FuturaPlanConfigWarden.Windows {
             Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread();
             _state = state;
             m_dbCache = new DbCache();
-            DatabaseList = new ObservableCollection<string>();
+
+            if (m_dbCache.TryGetCacheData(out ObservableCollection<string> data, out string active)) {
+                DatabaseList = data;
+                SelectedDatabase = active;
+            } else {
+                DatabaseList = new ObservableCollection<string>();
+            }
 
             DataContext = this;
 
@@ -147,7 +165,7 @@ namespace FuturaPlanConfigWarden.Windows {
             AppConfigTemplate.Save(AppConfigPath);
         }
 
-        private static string[] systemdbs = { "master", "msdb", "model", "tempdb" };
+        private static string[] systemdbs = { /*"master", "msdb", "model", "tempdb"*/ };
         public List<string> GetDatabaseList() {
             List<string> list = new List<string>();
             using (SqlConnection con = new("Server=localhost;Database=master;Trusted_Connection=True;")) {
@@ -175,13 +193,10 @@ namespace FuturaPlanConfigWarden.Windows {
             Array loadedProjects;
             appConfig = null;
 
-            try
-            {
+            try {
                 Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread();
                 loadedProjects = (Array)_state.DTE.ActiveSolutionProjects;
-            }
-            catch (Exception)
-            {
+            } catch (Exception) {
                 return false;
             }
 
@@ -260,11 +275,9 @@ namespace FuturaPlanConfigWarden.Windows {
                 return m_refreshDatabaseListCommand ??= new RelayCommand<object>(_ => {
                     DatabaseList.Clear();
 
-                    foreach (string dbname in GetDatabaseList()) {
+                    foreach (string dbname in GetDatabaseList().OrderBy(x => x)) {
                         DatabaseList.Add(dbname);
                     }
-
-                    DatabaseList.OrderBy(x => x);
 
                     if (string.IsNullOrEmpty(SelectedDatabase)) {
                         SelectedDatabase = DatabaseList[0];
@@ -276,13 +289,18 @@ namespace FuturaPlanConfigWarden.Windows {
             }
         }
 
-
         private RelayCommand<object> m_restoreDatabaseCommand;
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        private void OnPropertyChanged([CallerMemberName] string propertyName = "") {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
         public RelayCommand<object> RestoreDatabaseCommand {
             get {
                 return m_restoreDatabaseCommand ??= new RelayCommand<object>(_ => {
                     RestoreDatabase(SelectedDatabase);
-                }, _ => string.IsNullOrEmpty(SelectedDatabase));
+                }, _ => !string.IsNullOrEmpty(SelectedDatabase));
             }
         }
     }
