@@ -9,6 +9,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Data;
+using Microsoft.Win32;
 
 namespace FuturaPlanConfigWarden.Windows {
     public partial class FuturaPlanConfigWardenControl : UserControl {
@@ -18,6 +19,7 @@ namespace FuturaPlanConfigWarden.Windows {
         public string SelectedDatabase { get; set; }
         public bool OverrideConnectionString { get; set; } = true;
 
+        private DbCache m_dbCache;
 
         private WindowState _state;
 
@@ -47,6 +49,7 @@ namespace FuturaPlanConfigWarden.Windows {
         public FuturaPlanConfigWardenControl(WindowState state) {
             Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread();
             _state = state;
+            m_dbCache = new DbCache();
             DatabaseList = new ObservableCollection<string>();
 
             DataContext = this;
@@ -169,7 +172,6 @@ namespace FuturaPlanConfigWarden.Windows {
         }
 
         public bool TryGetAppConfig(out ProjectItem appConfig) {
-
             Array loadedProjects;
             appConfig = null;
 
@@ -197,17 +199,90 @@ namespace FuturaPlanConfigWarden.Windows {
             return false;
         }
 
+        private void RestoreDatabase(string database) {
+
+            OpenFileDialog openFileDialog1 = new OpenFileDialog();
+
+            if (openFileDialog1.ShowDialog() == false) {
+                return;
+            }
+
+            using (SqlConnection cn = new("Server=localhost;Database=master;Trusted_Connection=True;")) {
+                cn.Open();
+                #region step 1 SET SINGLE_USER WITH ROLLBACK
+                string sql = "IF DB_ID('" + database + "') IS NOT NULL ALTER DATABASE [" + database + "] SET SINGLE_USER WITH ROLLBACK IMMEDIATE";
+                using (var command = new SqlCommand(sql, cn)) {
+                    command.ExecuteNonQuery();
+                }
+                #endregion
+                #region step 2 InstanceDefaultDataPath
+
+                sql = "SELECT ServerProperty(N'InstanceDefaultDataPath') AS default_file";
+                string default_file = "NONE";
+                using (var command = new SqlCommand(sql, cn)) {
+                    using (var reader = command.ExecuteReader()) {
+                        if (reader.Read()) {
+                            default_file = reader.GetString(reader.GetOrdinal("default_file"));
+                        }
+                    }
+                }
+                sql = "SELECT ServerProperty(N'InstanceDefaultLogPath') AS default_log";
+                string default_log = "NONE";
+                using (var command = new SqlCommand(sql, cn)) {
+                    using (var reader = command.ExecuteReader()) {
+                        if (reader.Read()) {
+                            default_log = reader.GetString(reader.GetOrdinal("default_log"));
+                        }
+                    }
+                }
+                #endregion
+                #region step 3 Restore
+                sql = "USE MASTER RESTORE DATABASE [" + database + "] FROM DISK='" + openFileDialog1.FileName + "' WITH  FILE = 1, MOVE N'Stats' TO '" + default_file + "" + database + ".mdf', MOVE N'" + database + "_Log' TO '" + default_log + "" + database + "_Log.ldf', NOUNLOAD,  REPLACE,  STATS = 1;";
+                using (var command = new SqlCommand(sql, cn)) {
+                    command.ExecuteNonQuery();
+                }
+                #endregion
+                #region step 4 SET MULTI_USER
+                sql = "ALTER DATABASE [" + database + "] SET MULTI_USER";
+                using (var command = new SqlCommand(sql, cn)) {
+                    command.ExecuteNonQuery();
+                }
+                #endregion
+            }
+
+            MessageBox.Show($"Restored {database} succesfully.");
+        }
+
         private RelayCommand<object> m_refreshDatabaseListCommand;
         public RelayCommand<object> RefreshDatabaseListCommand {
             get {
+
                 return m_refreshDatabaseListCommand ??= new RelayCommand<object>(_ => {
                     DatabaseList.Clear();
+
                     foreach (string dbname in GetDatabaseList()) {
                         DatabaseList.Add(dbname);
                     }
-                }, _ => { 
-                    return DatabaseList != null; 
-                });
+
+                    DatabaseList.OrderBy(x => x);
+
+                    if (string.IsNullOrEmpty(SelectedDatabase)) {
+                        SelectedDatabase = DatabaseList[0];
+                    }
+
+                    m_dbCache.Update(DatabaseList, SelectedDatabase);
+
+                }, _ => DatabaseList != null);
+            }
+        }
+
+
+        private RelayCommand<object> m_restoreDatabaseCommand;
+        public RelayCommand<object> RestoreDatabaseCommand {
+            get {
+                return m_restoreDatabaseCommand ??= new RelayCommand<object>(_ => {
+                    RestoreDatabase(SelectedDatabase);
+                }, _ => string.IsNullOrEmpty(SelectedDatabase));
             }
         }
     }
