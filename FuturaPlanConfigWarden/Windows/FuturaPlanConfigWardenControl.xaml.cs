@@ -289,18 +289,18 @@ namespace FuturaPlanConfigWarden.Windows {
             }
         }
 
-        private RelayCommand<object> m_restoreDatabaseCommand;
 
         public event PropertyChangedEventHandler PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string propertyName = "") {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
+        private RelayCommand<object> m_restoreDatabaseCommand;
         public RelayCommand<object> RestoreDatabaseCommand {
             get {
                 return m_restoreDatabaseCommand ??= new RelayCommand<object>(_ => {
                     RestoreDatabase(SelectedDatabase);
-                }, _ => !string.IsNullOrEmpty(SelectedDatabase));
+                }, _ => false /*!string.IsNullOrEmpty(SelectedDatabase)*/); // Disabled for now
             }
         }
     }
