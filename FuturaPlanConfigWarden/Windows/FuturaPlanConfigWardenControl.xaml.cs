@@ -165,7 +165,7 @@ namespace FuturaPlanConfigWarden.Windows {
             AppConfigTemplate.Save(AppConfigPath);
         }
 
-        private static string[] systemdbs = { /*"master", "msdb", "model", "tempdb"*/ };
+        private static string[] systemdbs = { "master", "msdb", "model", "tempdb" };
         public List<string> GetDatabaseList() {
             List<string> list = new List<string>();
             using (SqlConnection con = new("Server=localhost;Database=master;Trusted_Connection=True;")) {
