@@ -275,6 +275,7 @@ namespace FuturaPlanConfigWarden.Windows
             {
                 cn.Open();
                 cn.StatisticsEnabled = true;
+
                 #region step 1 SET SINGLE_USER WITH ROLLBACK
                 string sql = "IF DB_ID('" + database + "') IS NOT NULL ALTER DATABASE [" + database + "] SET SINGLE_USER WITH ROLLBACK IMMEDIATE";
                 using (var command = new SqlCommand(sql, cn))
@@ -282,43 +283,16 @@ namespace FuturaPlanConfigWarden.Windows
                     command.ExecuteNonQuery();
                 }
                 #endregion
-                #region step 2 InstanceDefaultDataPath
 
-                sql = "SELECT ServerProperty(N'InstanceDefaultDataPath') AS default_file";
-                string default_file = "NONE";
-                using (var command = new SqlCommand(sql, cn))
-                {
-                    using (var reader = command.ExecuteReader())
-                    {
-                        if (reader.Read())
-                        {
-                            default_file = reader.GetString(reader.GetOrdinal("default_file"));
-                        }
-                    }
-                }
-                sql = "SELECT ServerProperty(N'InstanceDefaultLogPath') AS default_log";
-                string default_log = "NONE";
-                using (var command = new SqlCommand(sql, cn))
-                {
-                    using (var reader = command.ExecuteReader())
-                    {
-                        if (reader.Read())
-                        {
-                            default_log = reader.GetString(reader.GetOrdinal("default_log"));
-                        }
-                    }
-                }
-                #endregion
-                #region step 3 Restore
-
+                #region step 2 Restore
                 sql = "RESTORE DATABASE [" + database + "] FROM DISK='" + fileDialog.FileName + "' WITH FILE = 1, NOUNLOAD";
                 using (var command = new SqlCommand(sql, cn))
                 {
                     command.ExecuteNonQuery()
                 }
-
                 #endregion
-                #region step 4 SET MULTI_USER
+
+                #region step 3 SET MULTI_USER
                 sql = "ALTER DATABASE [" + database + "] SET MULTI_USER";
                 using (var command = new SqlCommand(sql, cn))
                 {
@@ -371,7 +345,7 @@ namespace FuturaPlanConfigWarden.Windows
                 return m_restoreDatabaseCommand ??= new RelayCommand<object>(_ =>
                 {
                     RestoreDatabase(SelectedDatabase);
-                }, _ => !string.IsNullOrEmpty(SelectedDatabase)); // Disabled for now
+                }, _ => !string.IsNullOrEmpty(SelectedDatabase)); 
             }
         }
     }
