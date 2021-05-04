@@ -264,9 +264,9 @@ namespace FuturaPlanConfigWarden.Windows
         private void RestoreDatabase(string database)
         {
 
-            OpenFileDialog openFileDialog1 = new OpenFileDialog();
+            OpenFileDialog fileDialog = new();
 
-            if (openFileDialog1.ShowDialog() == false)
+            if (fileDialog.ShowDialog() == false)
             {
                 return;
             }
@@ -274,6 +274,7 @@ namespace FuturaPlanConfigWarden.Windows
             using (SqlConnection cn = new("Server=localhost;Database=master;Trusted_Connection=True;"))
             {
                 cn.Open();
+                cn.StatisticsEnabled = true;
                 #region step 1 SET SINGLE_USER WITH ROLLBACK
                 string sql = "IF DB_ID('" + database + "') IS NOT NULL ALTER DATABASE [" + database + "] SET SINGLE_USER WITH ROLLBACK IMMEDIATE";
                 using (var command = new SqlCommand(sql, cn))
@@ -309,11 +310,13 @@ namespace FuturaPlanConfigWarden.Windows
                 }
                 #endregion
                 #region step 3 Restore
-                sql = "USE MASTER RESTORE DATABASE [" + database + "] FROM DISK='" + openFileDialog1.FileName + "' WITH  FILE = 1, MOVE N'Stats' TO '" + default_file + "" + database + ".mdf', MOVE N'" + database + "_Log' TO '" + default_log + "" + database + "_Log.ldf', NOUNLOAD,  REPLACE,  STATS = 1;";
+
+                sql = "RESTORE DATABASE [" + database + "] FROM DISK='" + fileDialog.FileName + "' WITH FILE = 1, NOUNLOAD";
                 using (var command = new SqlCommand(sql, cn))
                 {
-                    command.ExecuteNonQuery();
+                    command.ExecuteNonQuery()
                 }
+
                 #endregion
                 #region step 4 SET MULTI_USER
                 sql = "ALTER DATABASE [" + database + "] SET MULTI_USER";
@@ -324,7 +327,7 @@ namespace FuturaPlanConfigWarden.Windows
                 #endregion
             }
 
-            MessageBox.Show($"Restored {database} succesfully.");
+            MessageBox.Show("yeet", $"Restored {database} succesfully.");
         }
 
         private RelayCommand<object> m_refreshDatabaseListCommand;
@@ -368,7 +371,7 @@ namespace FuturaPlanConfigWarden.Windows
                 return m_restoreDatabaseCommand ??= new RelayCommand<object>(_ =>
                 {
                     RestoreDatabase(SelectedDatabase);
-                }, _ => false /*!string.IsNullOrEmpty(SelectedDatabase)*/); // Disabled for now
+                }, _ => !string.IsNullOrEmpty(SelectedDatabase)); // Disabled for now
             }
         }
     }
