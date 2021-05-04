@@ -327,7 +327,7 @@ namespace FuturaPlanConfigWarden.Windows
                 #endregion
             }
 
-            MessageBox.Show("yeet", $"Restored {database} succesfully.");
+            MessageBox.Show($"Restored {database} succesfully.", "Database restore");
         }
 
         private RelayCommand<object> m_refreshDatabaseListCommand;
