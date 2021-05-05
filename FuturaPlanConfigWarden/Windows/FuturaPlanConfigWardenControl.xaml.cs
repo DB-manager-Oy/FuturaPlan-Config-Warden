@@ -25,7 +25,7 @@ namespace FuturaPlanConfigWarden.Windows {
             }
             set {
                 m_selectedDatabase = value;
-                m_dbCache.Update(DatabaseList, value); // fite me irl
+                m_dbCache.Update(DatabaseList, value, CurrentServer); // fite me irl
                 OnPropertyChanged();
             }
         }
@@ -46,6 +46,7 @@ namespace FuturaPlanConfigWarden.Windows {
             }
         }
 
+        public string CurrentServer { get; set; }
 
         private XDocument AppConfigTemplate { get; set; }
 
@@ -62,7 +63,7 @@ namespace FuturaPlanConfigWarden.Windows {
         private string AppConfigPath { get; set; }
 
         private string m_originalConnectionString { get; set; } = @"Data Source=(LOCAL)\SQLEXPRESS;Initial Catalog=FuturaPlan;Trusted_Connection=True;MultipleActiveResultSets=True";
-        private string m_overrideConnectionString { get; } = "Data Source=(LOCAL);Initial Catalog={0};Trusted_Connection=True;MultipleActiveResultSets=True";
+        private string m_overrideConnectionString { get; } = "Data Source={1};Initial Catalog={0};Trusted_Connection=True;MultipleActiveResultSets=True";
 
         // These objects can be GCd and lose their listeners if we dont keep a reference to them.
         private BuildEvents m_buildEvents;
@@ -73,11 +74,13 @@ namespace FuturaPlanConfigWarden.Windows {
             _state = state;
 
             m_dbCache = new DbCache();
-            if (m_dbCache.TryGetCacheData(out ObservableCollection<string> data, out string active)) {
+            if (m_dbCache.TryGetCacheData(out ObservableCollection<string> data, out string active, out string server)) {
                 DatabaseList = data;
                 SelectedDatabase = active;
+                CurrentServer = server;
             } else {
                 DatabaseList = new ObservableCollection<string>();
+                CurrentServer = "localhost";
             }
 
             DataContext = this;
@@ -141,7 +144,7 @@ namespace FuturaPlanConfigWarden.Windows {
                     // Reload the template before every build so that modifications to the file dont get lost.
                     AppConfigTemplate = XDocument.Load(AppConfigPath);
 
-                    SetConnectionString(string.Format(m_overrideConnectionString, SelectedDatabase));
+                    SetConnectionString(string.Format(m_overrideConnectionString, SelectedDatabase, CurrentServer));
                     break;
                 default:
                     break;
@@ -176,8 +179,14 @@ namespace FuturaPlanConfigWarden.Windows {
         private static string[] systemdbs = { "master", "msdb", "model", "tempdb" };
         public List<string> GetDatabaseList() {
             List<string> list = new List<string>();
-            using (SqlConnection con = new("Server=localhost;Database=master;Trusted_Connection=True;")) {
-                con.Open();
+            using (SqlConnection con = new($"Server={CurrentServer};Database=master;Trusted_Connection=True;Connection Timeout=3")) {
+                
+                try {
+                    con.Open();
+                } catch (Exception ex) {
+                    MessageBox.Show($"Failed to get database list. { ex.Message }");
+                    return list;
+                }
 
                 using SqlCommand cmd = new SqlCommand("SELECT name from sys.databases", con);
                 using IDataReader dr = cmd.ExecuteReader();
@@ -230,7 +239,7 @@ namespace FuturaPlanConfigWarden.Windows {
                 return;
             }
 
-            using (SqlConnection cn = new("Server=localhost;Database=master;Trusted_Connection=True;")) {
+            using (SqlConnection cn = new($"Server={CurrentServer};Database=master;Trusted_Connection=True;")) {
                 cn.Open();
                 cn.StatisticsEnabled = true;
 
@@ -244,7 +253,7 @@ namespace FuturaPlanConfigWarden.Windows {
                 #region step 2 Restore
                 sql = "RESTORE DATABASE [" + database + "] FROM DISK='" + fileDialog.FileName + "' WITH FILE = 1, NOUNLOAD";
                 using (var command = new SqlCommand(sql, cn)) {
-                    command.ExecuteNonQuery()
+                    command.ExecuteNonQuery();
                 }
                 #endregion
 
@@ -262,19 +271,24 @@ namespace FuturaPlanConfigWarden.Windows {
         private RelayCommand<object> m_refreshDatabaseListCommand;
         public RelayCommand<object> RefreshDatabaseListCommand {
             get {
-
                 return m_refreshDatabaseListCommand ??= new RelayCommand<object>(_ => {
-                    DatabaseList.Clear();
+                    List<string> dblist = GetDatabaseList()
+                                            .OrderBy(x => x)
+                                            .ToList();
 
-                    foreach (string dbname in GetDatabaseList().OrderBy(x => x)) {
+                    if (dblist.Count > 0) {
+                        DatabaseList.Clear();
+                    }
+
+                    foreach (string dbname in dblist) {
                         DatabaseList.Add(dbname);
                     }
 
-                    if (string.IsNullOrEmpty(SelectedDatabase)) {
+                    if (string.IsNullOrEmpty(SelectedDatabase) && DatabaseList.Count > 0) {
                         SelectedDatabase = DatabaseList[0];
                     }
 
-                    m_dbCache.Update(DatabaseList, SelectedDatabase);
+                    m_dbCache.Update(DatabaseList, SelectedDatabase, CurrentServer);
 
                 }, _ => DatabaseList != null);
             }
