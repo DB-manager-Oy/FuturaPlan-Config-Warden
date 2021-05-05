@@ -3,7 +3,7 @@
     <Metadata>
         <Identity Id="FuturaPlanConfigWarden.10260561-f908-436a-8970-d409cef9f30d" Version="1.0" Language="en-US" Publisher="Henri Hakala" />
         <DisplayName>FuturaPlanConfigWarden</DisplayName>
-        <Description xml:space="preserve">Wardens your config.Wardens your config.</Description>
+        <Description xml:space="preserve">Wardens your config.</Description>
     </Metadata>
     <Installation>
         <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[16.0, 17.0)" />
